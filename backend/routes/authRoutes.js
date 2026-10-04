@@ -1,72 +1,107 @@
 const express = require("express");
 const bcrypt = require("bcrypt");
+const { body, validationResult } = require("express-validator");
+
 const User = require("../models/User");
 const authMiddleware = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
 
-// ===============================
+// ==========================================
 // SIGNUP
-// ===============================
-router.post("/signup", async (req, res) => {
-    try {
-        const { name, email, password } = req.body;
+// ==========================================
+router.post(
+    "/signup",
 
-        if (!name || !email || !password) {
-            return res.status(400).json({
-                message: "Name, email and password are required"
-            });
-        }
+    // Input validation
+    [
+        body("name")
+            .trim()
+            .notEmpty()
+            .withMessage("Name is required"),
 
-        const existingUser = await User.findOne({ email });
+        body("email")
+            .trim()
+            .isEmail()
+            .withMessage("Please enter a valid email"),
 
-        if (existingUser) {
-            return res.status(400).json({
-                message: "User already exists"
-            });
-        }
+        body("password")
+            .isLength({ min: 6 })
+            .withMessage("Password must be at least 6 characters long")
+    ],
 
-        // Hash password
-        const hashedPassword = await bcrypt.hash(password, 10);
+    async (req, res) => {
+        try {
 
-        const user = await User.create({
-            name: name,
-            email: email,
-            password: hashedPassword
-        });
+            // Check validation errors
+            const errors = validationResult(req);
 
-        res.status(201).json({
-            message: "User registered successfully",
-            user: {
-                id: user._id,
-                name: user.name,
-                email: user.email
+            if (!errors.isEmpty()) {
+                return res.status(400).json({
+                    message: "Validation failed",
+                    errors: errors.array()
+                });
             }
-        });
 
-    } catch (error) {
-        res.status(500).json({
-            message: "Signup failed",
-            error: error.message
-        });
+            const { name, email, password } = req.body;
+
+            // Check if user already exists
+            const existingUser = await User.findOne({ email });
+
+            if (existingUser) {
+                return res.status(400).json({
+                    message: "User already exists"
+                });
+            }
+
+            // Hash password
+            const hashedPassword = await bcrypt.hash(password, 10);
+
+            // Create new user
+            const user = await User.create({
+                name: name,
+                email: email,
+                password: hashedPassword
+            });
+
+            // Send response
+            res.status(201).json({
+                message: "User registered successfully",
+                user: {
+                    id: user._id,
+                    name: user.name,
+                    email: user.email
+                }
+            });
+
+        } catch (error) {
+
+            res.status(500).json({
+                message: "Signup failed",
+                error: error.message
+            });
+        }
     }
-});
+);
 
 
-// ===============================
+// ==========================================
 // LOGIN
-// ===============================
+// ==========================================
 router.post("/login", async (req, res) => {
     try {
+
         const { email, password } = req.body;
 
+        // Check required fields
         if (!email || !password) {
             return res.status(400).json({
                 message: "Email and password are required"
             });
         }
 
+        // Find user
         const user = await User.findOne({ email });
 
         if (!user) {
@@ -90,6 +125,7 @@ router.post("/login", async (req, res) => {
         // Store user ID in session
         req.session.userId = user._id.toString();
 
+        // Send response
         res.json({
             message: "Login successful",
             user: {
@@ -100,6 +136,7 @@ router.post("/login", async (req, res) => {
         });
 
     } catch (error) {
+
         res.status(500).json({
             message: "Login failed",
             error: error.message
@@ -108,12 +145,13 @@ router.post("/login", async (req, res) => {
 });
 
 
-// ===============================
+// ==========================================
 // PROTECTED PROFILE ROUTE
-// ===============================
+// ==========================================
 router.get("/profile", authMiddleware, async (req, res) => {
     try {
 
+        // Find logged-in user
         const user = await User
             .findById(req.session.userId)
             .select("-password");
@@ -124,12 +162,14 @@ router.get("/profile", authMiddleware, async (req, res) => {
             });
         }
 
+        // Send user profile
         res.json({
             message: "Protected profile accessed successfully",
             user: user
         });
 
     } catch (error) {
+
         res.status(500).json({
             message: "Failed to access profile",
             error: error.message
@@ -138,4 +178,7 @@ router.get("/profile", authMiddleware, async (req, res) => {
 });
 
 
+// ==========================================
+// EXPORT ROUTER
+// ==========================================
 module.exports = router;
