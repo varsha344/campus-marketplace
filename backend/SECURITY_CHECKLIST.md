@@ -15,6 +15,7 @@
 - [x] Name validation implemented
 - [x] Email format validation implemented
 - [x] Minimum password length validation implemented
+
 - [x] Invalid input returns validation errors
 
 ## 4. Session Security
