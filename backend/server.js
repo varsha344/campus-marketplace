@@ -1,3 +1,4 @@
+
 const express = require("express");
 const mongoose = require("mongoose");
 const dotenv = require("dotenv");
@@ -8,22 +9,13 @@ const cors = require("cors");
 const productRoutes = require("./routes/productRoutes");
 const authRoutes = require("./routes/authRoutes");
 
-
-// ==========================================
-// LOAD ENVIRONMENT VARIABLES
-// ==========================================
+// Load environment variables
 dotenv.config();
 
-
-// ==========================================
-// CREATE EXPRESS APPLICATION
-// ==========================================
+// Create Express application
 const app = express();
 
-
-// ==========================================
-// CORS CONFIGURATION
-// ==========================================
+// CORS configuration
 app.use(
     cors({
         origin: "http://localhost:3000",
@@ -31,136 +23,105 @@ app.use(
     })
 );
 
-// ==========================================
-// REQUEST LOGGING
-// ==========================================
+// Request logging middleware
 app.use((req, res, next) => {
-
     console.log(
         `${new Date().toISOString()} - ${req.method} ${req.originalUrl}`
     );
-
     next();
 });
-// ==========================================
-// BODY PARSING MIDDLEWARE
-// ==========================================
+
+// Body parsing middleware
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-app.use(
-    express.urlencoded({
-        extended: true
-    })
-);
-
-
-// ==========================================
-// COOKIE PARSER
-// ==========================================
+// Cookie parser
 app.use(cookieParser());
 
-
-// ==========================================
-// SESSION CONFIGURATION
-// ==========================================
+// Session configuration
 app.use(
     session({
         secret:
             process.env.SESSION_SECRET ||
             "campusmarketplace-secret",
-
         resave: false,
-
         saveUninitialized: false,
-
         cookie: {
             httpOnly: true,
-
             maxAge: 1000 * 60 * 60
         }
     })
 );
 
+// Product routes
+app.use("/api/products", productRoutes);
 
-// ==========================================
-// PRODUCT ROUTES
-// ==========================================
-app.use(
-    "/api/products",
-    productRoutes
-);
+// Authentication routes
+app.use("/api/auth", authRoutes);
 
-
-// ==========================================
-// AUTHENTICATION ROUTES
-// ==========================================
-app.use(
-    "/api/auth",
-    authRoutes
-);
-
-
-// ==========================================
-// BASIC TEST ROUTE
-// ==========================================
+// Basic test route
 app.get("/", (req, res) => {
-
-    res.json({
+    res.status(200).json({
         message: "Campus Marketplace API is running"
     });
-
 });
 
+// Handle unknown routes
+app.use((req, res) => {
+    res.status(404).json({
+        message: "Route not found"
+    });
+});
 
-// ==========================================
-// GLOBAL ERROR HANDLING MIDDLEWARE
-// ==========================================
+// Global error handling middleware
 app.use((err, req, res, next) => {
-
     console.error("Error:", err.message);
 
-    res.status(500).json({
+    // Handle invalid product data
+    if (err.name === "ValidationError") {
+        return res.status(400).json({
+            message: "Product validation failed",
+            errors: Object.values(err.errors).map(
+                (error) => error.message
+            )
+        });
+    }
 
-        message: "Something went wrong on the server",
+    // Handle invalid MongoDB IDs
+    if (err.name === "CastError") {
+        return res.status(400).json({
+            message: "Invalid product data"
+        });
+    }
 
-        error: err.message
+    // Handle duplicate values
+    if (err.code === 11000) {
+        return res.status(409).json({
+            message: "This value already exists"
+        });
+    }
 
+    // Handle other errors
+    return res.status(500).json({
+        message: "Something went wrong on the server"
     });
-
 });
 
-
-// ==========================================
-// MONGODB CONNECTION
-// ==========================================
+// Connect to MongoDB and start server
 mongoose
     .connect(process.env.MONGO_URI)
-
     .then(() => {
+        console.log("MongoDB connected successfully");
 
-        console.log(
-            "MongoDB connected successfully"
-        );
-
-
-        // ==================================
-        // START SERVER
-        // ==================================
         app.listen(5000, () => {
-
             console.log(
                 "Server running on http://localhost:5000"
             );
-
         });
-
     })
-
     .catch((error) => {
-
         console.error(
             "MongoDB connection failed:",
             error.message
         );
-
     });
